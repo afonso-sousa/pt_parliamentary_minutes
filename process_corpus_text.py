@@ -75,6 +75,7 @@ for row_idx, row in df.iterrows():
     
     print(f"Entry #{row_idx + 1} - Done successfully")
 
-df.to_csv("data/out_with_text_X-XII_processed.csv", index=False)
+# df = df[~df.isnull().any(axis=1)]
+# df.to_csv("data/out_with_text_X-XII_processed.csv", index=False)
 
 # %%
