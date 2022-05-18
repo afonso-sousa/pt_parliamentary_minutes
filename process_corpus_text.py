@@ -2,8 +2,10 @@
 import re
 import pandas as pd
 
+
 df = pd.read_csv("data/out_with_text_X-XII.csv")
 
+no_speech_count = 0
 for row_idx, row in df.iterrows():
     # if 3746 != row_idx:
     #     continue
@@ -11,21 +13,22 @@ for row_idx, row in df.iterrows():
     all_but_last_extra = row["text"].split("|||")[:-1]
     all_but_last_extra = "\n\n".join(all_but_last_extra)
     
-    name = row["dep_nome"]
-    party = row["dep_gp"] if row["dep_gp"] != 'PEV' else 'Os Verdes'
+    # name = row["dep_name"]
+    # regex match at least 2 names
+    # TODO there are still problems with some names (df[df["text"] == ''])
+    name_regex = r"(("+"|".join(row["dep_name"].split())+").*?){2}"
+    party = row["dep_parl_group"] if row["dep_parl_group"] != 'PEV' else 'Os Verdes'
     
     speeches = all_but_last_extra.split("\n\n")
     speeches_with_name = []
     break_page = False
-    # TODO: Orador / Oradora
-    r = fr"^[\w\W]*[Sr.ª|Sr.] {name} \({party}\): —"
+
+    named_intro_regex = fr"^[\w\W]*[Sr.ª|Sr.] {name_regex} \({party}\): —"
+    implicit_speaker_regex = fr"^[\w\W]*[Orador|Oradora]: —"
+    intro_regex = f"{named_intro_regex}|{implicit_speaker_regex}"
     for i, speech in enumerate(speeches):
-        # if break_page and len(speech.split()) > 10:
-        #     speeches_with_name.append(speech)
-        #     break_page = False
-        
         # starts with speaker intro
-        if re.search(r, speech, flags=re.IGNORECASE) and len(speech.split()) > 10:
+        if re.search(intro_regex, speech, flags=re.IGNORECASE) and len(speech.split()) > 10:
             speeches_with_name.append(speech)
         # does not start with speaker intro
         elif speeches_with_name and speeches_with_name[-1].endswith("\x0c") and len(speech.split()) > 10:
@@ -41,12 +44,13 @@ for row_idx, row in df.iterrows():
 
     if len(speeches_with_name) == 0:
         print(f"No speeches for entry #{row_idx}")
+        no_speech_count += 1
         
     # join speech fragments
     for i in range(len(speeches_with_name)):
         speech = speeches_with_name[i]
         # remove speaker intro
-        speech = re.sub(r, '', speech, flags=re.IGNORECASE).strip()
+        speech = re.sub(intro_regex, '', speech, flags=re.IGNORECASE).strip()
         # replace linebreaks with spaces
         speech = speech.replace("\n", " ")
         # replace multiple spaces with single space
@@ -75,7 +79,7 @@ for row_idx, row in df.iterrows():
     
     print(f"Entry #{row_idx + 1} - Done successfully")
 
-# df = df[~df.isnull().any(axis=1)]
-# df.to_csv("data/out_with_text_X-XII_processed.csv", index=False)
+df = df[~df.isnull().any(axis=1)]
+df.to_csv("data/out_with_text_X-XII_processed.csv", index=False)
 
 # %%

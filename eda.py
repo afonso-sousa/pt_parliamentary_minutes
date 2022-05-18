@@ -12,7 +12,7 @@ from nltk.tokenize import word_tokenize
 # %%
 df = pd.read_csv("data/out_with_text_X-XII_processed.csv")
 df = df[~df.isnull().any(axis=1)]
-df.drop(["pub_serie", "pub_legislatura", "pdf_file_path"], axis=1, inplace=True)
+# df.drop(["pub_serie", "pub_legislatura", "pdf_file_path"], axis=1, inplace=True)
 
 df.describe()
 
@@ -26,14 +26,14 @@ df.loc[df["ini_leg"] == 'XI']["doc_first_page"].unique()
 df.loc[df["ini_leg"] == 'XII']["doc_first_page"].unique()
 
 # %%
-df["name_split"] = df["dep_nome"].str.split()
+df["name_split"] = df["dep_name"].str.split()
 middle_name_speakers = df.loc[df["name_split"].str.len() == 3]
 df.drop("name_split", axis=1, inplace=True)
 middle_name_speakers
 
 # %%
 # array(['PS', 'CDS-PP', 'PCP', 'BE', 'PSD', 'PEV', 'Ninsc'])
-df["dep_gp"].unique()
+df["dep_parl_group"].unique()
 
 
 

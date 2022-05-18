@@ -1,3 +1,4 @@
+# %%
 import json
 import re
 
@@ -5,6 +6,8 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
+
+parties = ['PS', 'PSD', 'BE', 'CDS-PP', 'PEV', 'PCP']
 
 class ARValuesMissingException(Exception):
     pass
@@ -39,6 +42,10 @@ def process_vote_detail(detail):
         votes["a_favor"] = list(map(str.strip, in_favour))
         votes["contra"] = list(map(str.strip, against))
         votes["abstencao"] = list(map(str.strip, abstention))
+
+    votes["a_favor"] = [i for i in votes["a_favor"] if not re.search(rf"^\d+-({'|'.join(parties)})$", i)]
+    votes["contra"] = [i for i in votes["contra"] if not re.search(rf"^\d+-({'|'.join(parties)})$", i)]
+    votes["abstencao"] = [i for i in votes["abstencao"] if not re.search(rf"^\d+-({'|'.join(parties)})$", i)]
 
     assert all(
         key in votes for key in ["a_favor", "contra", "abstencao"]
@@ -86,6 +93,29 @@ def add_ini_attributes(iniciativa):
     return row
 
 
+def process_ini_authors(iniciativa):
+    row = []
+
+    if "iniAutorDeputados" in iniciativa:
+        autores_deputados = iniciativa["iniAutorDeputados"][
+            "pt_gov_ar_objectos_iniciativas_AutoresDeputadosOut"
+        ]
+        if isinstance(autores_deputados, list):
+            autores_deputados = [
+                f"{dep['idCadastro']}-{dep['nome']}-{dep['GP']}"
+                for dep in autores_deputados
+            ]
+        else:
+            autores_deputados = f"{autores_deputados['idCadastro']}-{autores_deputados['nome']}-{autores_deputados['GP']}"
+    else:
+        autores_deputados = iniciativa["iniAutorOutros"]["nome"]
+
+    row.append(autores_deputados)
+    
+    return row
+
+
+
 def process_voting(votacao):
     row = []
 
@@ -121,17 +151,24 @@ def process_publication(publicacao):
     row.append(pub_sessao)
     row.append(publicacao["pubdt"])
     pub_legislatura = publicacao["pubLeg"]
-    row.append(pub_legislatura)
+    # row.append(pub_legislatura)
     pub_serie = publicacao["pubTipo"].split()[1]
-    row.append(pub_serie)
-    row.append(publicacao["pag"]["string"])
+    # row.append(pub_serie)
+    pages = publicacao["pag"]["string"]
+    if isinstance(pages, str):
+        row.append([pages])
+    else:
+        row.append(pages)
     row.append(f"dar_serie_{pub_serie}_{pub_legislatura}_{pub_sessao}_{pub_num:03}.pdf")
-    row.append(scrape_first_page(publicacao))
+    if pub_legislatura == "X":
+        row.append(scrape_first_page(publicacao))
+    else:
+        row.append(1)
 
     return row
 
 
-def process_authors(deputado):
+def process_speaker(deputado):
     row = []
 
     row.append(deputado["idCadastro"])
@@ -141,6 +178,7 @@ def process_authors(deputado):
     # row.append(deputado2string)
 
     return row
+
 
 
 def get_value_from_key(key, dictionary):
@@ -158,8 +196,8 @@ def get_value_from_key(key, dictionary):
                 yield result
 
 
-leg_num_list = ["VIII", "IX", "X", "XI", "XII"]
-# leg_num_list = ["XIII"]
+# leg_num_list = ["VIII", "IX", "X", "XI", "XII"]
+leg_num_list = ["X", "XI", "XII"]
 rows = []
 count = 0
 for leg_num in leg_num_list:
@@ -216,6 +254,7 @@ for leg_num in leg_num_list:
                 publicacao = publicacao[0]["pt_gov_ar_objectos_PublicacoesOut"]
 
                 row.extend(add_ini_attributes(iniciativa))
+                row.extend(process_ini_authors(iniciativa))
                 row.extend(process_voting(votacao))
                 row.extend(process_publication(publicacao))
 
@@ -223,7 +262,7 @@ for leg_num in leg_num_list:
                 if not deputado:
                     continue
                 deputado = deputado[0]
-                row.extend(process_authors(deputado))
+                row.extend(process_speaker(deputado))
 
                 print("Adding row...")
                 rows.append(row)
@@ -241,27 +280,29 @@ df = pd.DataFrame(
     columns=[
         "ini_num",
         "ini_leg",
-        "ini_tipo",
-        "ini_titulo",
-        "ini_sessao",
-        "data_inicio_leg",
-        "data_fim_leg",
-        "vot_resultado",
-        "vot_favor",
-        "vot_contra",
-        "vot_abstencao",
+        "ini_type",
+        "ini_title",
+        "ini_session",
+        "leg_begin_date",
+        "leg_end_date",
+        "authors",
+        "vot_results",
+        "vot_in_favour",
+        "vot_against",
+        "vot_abstention",
         "pub_num",
-        "pub_sessao",
-        "pub_data",
-        "pub_legislatura",
-        "pub_serie",
+        "pub_session",
+        "pub_date",
         "pages",
         "pdf_file_path",
         "doc_first_page",
         "dep_id",
-        "dep_nome",
-        "dep_gp",
+        "dep_name",
+        "dep_parl_group",
     ],
 )
 
-df.to_csv("data/out.csv", index=False)
+# df.to_csv("data/out.csv", index=False)
+df.to_pickle("data/initial_corpus_meta.pkl") 
+
+# %%
