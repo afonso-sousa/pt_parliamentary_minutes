@@ -14,3 +14,8 @@ We have compiled an `enviroment.yml` file with all the required dependencies. To
 ```shell
 conda env create -f environment.yml
 ```
+
+### Model Training and Evaluation
+Simply run:
+```shell
+python nlp_vote_prediction.py --model <'nb'|'lr'|'bert'>

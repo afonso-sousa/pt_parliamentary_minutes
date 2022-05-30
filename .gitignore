@@ -135,5 +135,8 @@ dmypy.json
 .vscode
 data/
 data
+model_results/
+model_results
 *.png
 *.jpg
+*.txt
