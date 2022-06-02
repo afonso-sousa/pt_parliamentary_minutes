@@ -1,4 +1,3 @@
-# %%
 # Vote Prediction
 
 # In the scope of the [DARGMINTS](https://web.fe.up.pt/~dargmints/) project, we have collected
@@ -17,7 +16,7 @@ import nltk
 import numpy as np
 import pandas as pd
 import torch
-from datasets import Dataset, DatasetDict, load_metric
+from datasets import Dataset, DatasetDict
 from gensim.models import KeyedVectors
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize

@@ -17,3 +17,5 @@ dependencies:
   - transformers=4.19.2
   - gensim=4.2.0
   - scikit-learn=1.0.2
+  - selenium=4.2.0
+  - webdriver-manager=3.7.0
