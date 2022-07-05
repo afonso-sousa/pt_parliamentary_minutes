@@ -133,9 +133,6 @@ def parse_args():
     parser.add_argument(
         "--resume_from", type=str, help="file path to resume from",
     )
-    parser.add_argument(
-        "--log_path", type=str, default="general.log", help="log file path",
-    )
     args = parser.parse_args()
 
     if args.input_path and args.resume_from:

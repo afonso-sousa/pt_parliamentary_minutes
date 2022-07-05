@@ -47,9 +47,10 @@ python process_corpus_text.py [optional arguments]
 ### Model Training and Evaluation
 Simply run:
 ```shell
-python nlp_vote_prediction.py --model ${MODELNAME}
+python nlp_vote_prediction.py --mode ${MODE} --model ${MODELNAME}
 ```
 ${MODELNAME} can take values `nb` (NaiveBayes), `lr` (Logistic Regression), or `bert` (DistilBERT).
+${MODE} can take values `train`, `test`, or `attention_vis` (for DistilBERT).
 
 ### Exploratory Data Analysis
 In `eda.py` you can find a Jupyter-like Python file. It contains a variety of different statistical information (frequencies, plots, etc.). If ran in Visual Studio Code, you can execute the code as notebook cells.

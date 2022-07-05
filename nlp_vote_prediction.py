@@ -1,5 +1,4 @@
-# Vote Prediction
-
+# %%
 # In the scope of the [DARGMINTS](https://web.fe.up.pt/~dargmints/) project, we have collected
 # a corpus of debates of the Portuguese Parliament regarding specific parliamentary initiatives
 # that are subject to voting. For each debate, we have discourses of each participating deputy,
@@ -80,6 +79,14 @@ def entry_cleanup(r: pd.Series) -> pd.Series:
 def parse_args():
     parser = argparse.ArgumentParser(description="Train and evaluate a classifier")
     parser.add_argument(
+        "--mode",
+        type=str,
+        default="test",
+        choices=["train", "test", "attention_vis"],
+        nargs="?",
+        help="whether to train or test the model",
+    )
+    parser.add_argument(
         "--model",
         type=str,
         default="bert",
@@ -92,105 +99,120 @@ def parse_args():
     return args
 
 
-if __name__ == "__main__":
-    args = parse_args()
+# %%
+# if __name__ == "__main__":
 
-    normalized_dataset_path = Path("data/normalized_dataset.csv")
-    if args.model in ["nb", "lr"]:
-        if normalized_dataset_path.is_file():
-            print("Normalized dataset found. Loading dataset...")
-            dataset = pd.read_csv("data/normalized_dataset.csv")
-        else:
-            print("Normalized dataset not found. Loading original dataset...")
-            print("Importing dataset...")
-            dataset = pd.read_csv("data/parliamentary_minutes.csv")
-            dataset = dataset[~dataset.isnull().any(axis=1)]
-            dataset = dataset.reset_index(drop=True)
+# args = parse_args()
 
-            print("Normalizing dataset...")
-            dataset["processed_text"] = dataset["text"].progress_apply(
-                lambda r: entry_cleanup(r)
-            )
-            dataset.to_csv("data/normalized_dataset.csv", index=False)
+from argparse import Namespace
 
-        X = dataset["processed_text"]
-        y = dataset["vote"]
+args = Namespace(model = "bert", mode="test")
+
+
+normalized_dataset_path = Path("data/normalized_dataset.csv")
+if args.model in ["nb", "lr"]:
+    if normalized_dataset_path.is_file():
+        print("Normalized dataset found. Loading dataset...")
+        dataset = pd.read_csv("data/normalized_dataset.csv")
     else:
+        print("Normalized dataset not found. Loading original dataset...")
         print("Importing dataset...")
         dataset = pd.read_csv("data/parliamentary_minutes.csv")
         dataset = dataset[~dataset.isnull().any(axis=1)]
         dataset = dataset.reset_index(drop=True)
 
-        X = dataset["text"]
-        y = dataset["vote"]
+        print("Normalizing dataset...")
+        dataset["processed_text"] = dataset["text"].progress_apply(
+            lambda r: entry_cleanup(r)
+        )
+        dataset.to_csv("data/normalized_dataset.csv", index=False)
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=0.2)
+    X = dataset["processed_text"]
+    y = dataset["vote"]
+else:
+    print("Importing dataset...")
+    dataset = pd.read_csv("data/out_with_text_processed.csv")
+    dataset = dataset[~dataset.isnull().any(axis=1)]
+    dataset = dataset.reset_index(drop=True)
 
-    print("\nLabel distribution in the training set:")
-    print(y_train.value_counts(normalize=True))
+    X = dataset[["ini_num", "dep_parl_group", "text"]]
+    # X = dataset["text"]
+    y = dataset["vote"]
 
-    print("\nLabel distribution in the test set:")
-    print(y_test.value_counts(normalize=True))
+X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=0.2)
 
-    if args.model == "nb":
-        max_features = 10_000
-        selected_features = 3_000
-        vectorizer = TfidfVectorizer(max_features=max_features, ngram_range=(1, 2))
-        X_train_tfidf = vectorizer.fit_transform(X_train)
+print("\nLabel distribution in the training set:")
+print(y_train.value_counts(normalize=True))
 
-        # Select most relevant 3000 features
-        selector = SelectKBest(chi2, k=selected_features)
-        X_train_selected = selector.fit_transform(X_train_tfidf, y_train)
+print("\nLabel distribution in the test set:")
+print(y_test.value_counts(normalize=True))
 
-        clf = MultinomialNB()
-        clf.fit(X_train_selected, y_train.ravel())
-        X_test_features = vectorizer.transform(X_test)
-        X_test_selected = selector.transform(X_test_features)
-        y_pred = clf.predict(X_test_selected)
+# %%
+if args.model == "nb":
+    print("Starting Naive Bayes training and eval")
+    max_features = 10_000
+    selected_features = 3_000
+    vectorizer = TfidfVectorizer(max_features=max_features, ngram_range=(1, 2))
+    X_train_tfidf = vectorizer.fit_transform(X_train)
 
-        print(confusion_matrix(y_test, y_pred))
-        print(f"Accuracy: {accuracy_score(y_test, y_pred)}")
-        print(f"Precision: {precision_score(y_test, y_pred, average='macro')}")
-        print(f"Recall: {recall_score(y_test, y_pred, average='macro')}")
-        print(f"F1: {f1_score(y_test, y_pred, average='macro')}")
-    elif args.model == "lr":
-        word_embeddings = KeyedVectors.load_word2vec_format("cbow_s50.txt")
+    # Select most relevant 3000 features
+    selector = SelectKBest(chi2, k=selected_features)
+    X_train_selected = selector.fit_transform(X_train_tfidf, y_train)
 
-        def document_vector(r):
-            """Create document vectors by averaging word vectors. Remove out-of-vocabulary words."""
-            r = [
-                word
-                for word in word_tokenize(r, language="portuguese")
-                if word in word_embeddings.index_to_key
-            ]
+    clf = MultinomialNB()
+    clf.fit(X_train_selected, y_train.ravel())
+    X_test_features = vectorizer.transform(X_test)
+    X_test_selected = selector.transform(X_test_features)
+    y_pred = clf.predict(X_test_selected)
 
-            return np.mean(word_embeddings[r], axis=0)
+    print(confusion_matrix(y_test, y_pred))
+    print(f"Accuracy: {accuracy_score(y_test, y_pred)}")
+    print(f"Precision: {precision_score(y_test, y_pred, average='macro')}")
+    print(f"Recall: {recall_score(y_test, y_pred, average='macro')}")
+    print(f"F1: {f1_score(y_test, y_pred, average='macro')}")
+elif args.model == "lr":
+    print("Starting Logistic Regression training and eval")
+    word_embeddings = KeyedVectors.load_word2vec_format("cbow_s50.txt")
 
-        X_train_embedded = [
-            document_vector(speech)
-            for _, speech in tqdm(
-                X_train.items(),
-                desc="Creating train document vector",
-                total=len(X_train),
-            )
+    def document_vector(r):
+        """Create document vectors by averaging word vectors. Remove out-of-vocabulary words."""
+        r = [
+            word
+            for word in word_tokenize(r, language="portuguese")
+            if word in word_embeddings.index_to_key
         ]
-        X_test_embedded = [
-            document_vector(speech)
-            for _, speech in tqdm(
-                X_test.items(), desc="Creating test document vector", total=len(X_test)
-            )
-        ]
 
-        clf = LogisticRegression(solver="liblinear")
-        clf.fit(X_train_embedded, y_train.ravel())
-        y_pred = clf.predict(X_test_embedded)
+        return np.mean(word_embeddings[r], axis=0)
 
-        print(confusion_matrix(y_test, y_pred))
-        print(f"Accuracy: {accuracy_score(y_test, y_pred)}")
-        print(f"Precision: {precision_score(y_test, y_pred, average='macro')}")
-        print(f"Recall: {recall_score(y_test, y_pred, average='macro')}")
-        print(f"F1: {f1_score(y_test, y_pred, average='macro')}")
-    elif args.model == "bert":
+    X_train_embedded = [
+        document_vector(speech)
+        for _, speech in tqdm(
+            X_train.items(),
+            desc="Creating train document vector",
+            total=len(X_train),
+        )
+    ]
+    X_test_embedded = [
+        document_vector(speech)
+        for _, speech in tqdm(
+            X_test.items(), desc="Creating test document vector", total=len(X_test)
+        )
+    ]
+
+    clf = LogisticRegression(solver="liblinear")
+    clf.fit(X_train_embedded, y_train.ravel())
+    y_pred = clf.predict(X_test_embedded)
+
+    print(confusion_matrix(y_test, y_pred))
+    print(f"Accuracy: {accuracy_score(y_test, y_pred)}")
+    print(f"Precision: {precision_score(y_test, y_pred, average='macro')}")
+    print(f"Recall: {recall_score(y_test, y_pred, average='macro')}")
+    print(f"F1: {f1_score(y_test, y_pred, average='macro')}")
+elif args.model == "bert":
+    if args.mode == "train":
+        print("\nStarting DistilBERT training and eval")
+        X_train = X_train["text"]
+        
         model_name = "distilbert-base-multilingual-cased"
 
         y_train = y_train.replace(
@@ -266,143 +288,142 @@ if __name__ == "__main__":
         print(f"Precision: {precision_score(y_test, y_pred, average='macro')}")
         print(f"Recall: {recall_score(y_test, y_pred, average='macro')}")
         print(f"F1: {f1_score(y_test, y_pred, average='macro')}")
+    elif args.mode == "test":
+        print("\nStarting DistilBERT testing")
+        def disambiguated_mode(x):
+            mode = pd.Series.mode(x)
+            if len(mode) == 3:
+                return 2 # "vot_abstention"
+            if set(mode.values) == set([0, 1]):
+                return 2 # "vot_abstention"
+            if set(mode.values) == set([0, 2]):
+                return 0 # "vot_in_favour"
+            if set(mode.values) == set([1, 2]):
+                return 1 # "vot_against"
+            return pd.Series.mode(x).values[0]
 
-# %%
-import argparse
-import re
-from pathlib import Path
+        model_name = "distilbert-base-multilingual-cased"
 
-import nltk
-import numpy as np
-import pandas as pd
-import torch
-from datasets import Dataset, DatasetDict
-from gensim.models import KeyedVectors
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.feature_selection import SelectKBest, chi2
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (accuracy_score, confusion_matrix, f1_score,
-                             precision_score, recall_score)
-from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import MultinomialNB
-from tqdm import tqdm
-from transformers import (AutoModelForSequenceClassification, AutoTokenizer,
-                          DataCollatorWithPadding, Trainer, TrainingArguments)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-# %%
-print("Importing dataset...")
-dataset = pd.read_csv("data/parliamentary_minutes.csv")
+        model = AutoModelForSequenceClassification.from_pretrained(
+            "./model_results/checkpoint-924/"
+        )
 
-dataset = dataset.loc[:80]
+        def preprocess_function(sample):
+            return tokenizer(sample["text"], padding="max_length", truncation=True)
 
-dataset["ini_num"] = np.random.randint(1, 15, dataset.shape[0])
-dataset = dataset.sort_values(by=["ini_num"])
+        y_test = y_test.replace(
+            {"vot_in_favour": 0, "vot_against": 1, "vot_abstention": 2,}
+        )  # rename labels to int values
 
-dataset = dataset[~dataset.isnull().any(axis=1)]
-dataset = dataset.reset_index(drop=True)
+        test_df = pd.concat([X_test, y_test], axis=1)
+        test_df = test_df.rename(columns={"processed_text": "text", "vote": "label"})
 
-X = dataset[["ini_num", "dep_parl_group", "text"]]
-# y = dataset["vote"]
+        test_dataset = DatasetDict({"test": Dataset.from_pandas(test_df)})
 
-# %%
-def disambiguated_mode(x):
-    mode = pd.Series.mode(x)
-    if len(mode) == 3:
-        return "vot_abstention"
-    if set(mode.values) == set(["vot_in_favour", "vot_against"]):
-        return "vot_abstention"
-    if set(mode.values) == set(["vot_in_favour", "vot_abstention"]):
-        return "vot_in_favour"
-    if set(mode.values) == set(["vot_against", "vot_abstention"]):
-        return "vot_against"
-    return pd.Series.mode(x).values[0]
+        encoded_dataset = test_dataset.map(preprocess_function, batched=True)
+        encoded_dataset.set_format(
+            type="torch", columns=["input_ids", "label", "attention_mask"]
+        )
 
+        device = next(model.parameters()).device
+        y_pred = []
+        for p in encoded_dataset["test"]["text"]:
+            ti = tokenizer(p, return_tensors="pt", truncation=True)
+            out = model(**ti.to(device))
+            pred = torch.argmax(out.logits).detach().cpu().item()
+            y_pred.append(pred)
 
-vote_mode = (
-    dataset.groupby(["ini_num", "dep_parl_group"])["vote"]
-    .agg(lambda x: disambiguated_mode(x))
-    .to_frame()
-)
+        y_test = encoded_dataset["test"]["label"]
 
-y = dataset.groupby(["ini_num", "dep_parl_group"])["vote"].transform(
-    lambda x: disambiguated_mode(x)
-)
+        print("Simple Testing\n")
+        print("Confusion Matrix:")
+        print(confusion_matrix(y_test, y_pred))
+        print(f"Accuracy: {accuracy_score(y_test, y_pred)}")
+        print(f"Precision: {precision_score(y_test, y_pred, average='macro')}")
+        print(f"Recall: {recall_score(y_test, y_pred, average='macro')}")
+        print(f"F1: {f1_score(y_test, y_pred, average='macro')}")
 
-# %%
-model_name = "distilbert-base-multilingual-cased"
+        test_df = test_df.reset_index(drop=True)
+        test_df["preds"] = pd.Series(y_pred, dtype=int)
 
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+        agg_labels = test_df.groupby(["ini_num", "dep_parl_group"])["label"].agg(
+            lambda x: disambiguated_mode(x)
+        ).values
 
+        agg_preds = test_df.groupby(["ini_num", "dep_parl_group"])["preds"].agg(
+            lambda x: disambiguated_mode(x)
+        ).values    
 
-# %%
-model = AutoModelForSequenceClassification.from_pretrained(
-    "./model_results/checkpoint-924/"
-)
+        print("Testing with aggregated parties\n")
+        print("Confusion Matrix:")
+        print(confusion_matrix(agg_labels, agg_preds))
+        print(f"Accuracy: {accuracy_score(agg_labels, agg_preds)}")
+        print(f"Precision: {precision_score(agg_labels, agg_preds, average='macro')}")
+        print(f"Recall: {recall_score(agg_labels, agg_preds, average='macro')}")
+        print(f"F1: {f1_score(agg_labels, agg_preds, average='macro')}")
+    elif args.mode == "attention_vis":
+        print("\nStarting attention weight visualization")
+        
+        import matplotlib.pyplot as plt
+        plt.switch_backend('agg')
+        import matplotlib.ticker as ticker
+        import numpy as np
+        from nltk.tokenize import word_tokenize
 
-# %%
+        model_name = "distilbert-base-multilingual-cased"
 
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-def preprocess_function(sample):
-    return tokenizer(sample["text"], padding="max_length", truncation=True)
+        model = AutoModelForSequenceClassification.from_pretrained(
+            "./model_results/checkpoint-924/"
+        )
 
+        # Visualize attention
+        def visualize_attention(input_text, out_attentions, layer=0, head=4):
+            attentions = out_attentions[layer].squeeze(0)[head].detach().cpu()
+            # Set up figure with colorbar
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            cax = ax.matshow(attentions.numpy(), cmap='hot')
+            fig.colorbar(cax)
 
-_, X_test, _, y_test = train_test_split(X, y, stratify=y, test_size=0.2)
+            tokens = word_tokenize(input_text, language="portuguese")
 
-# %%
-y_test = y_test.replace(
-    {"vot_in_favour": 0, "vot_against": 1, "vot_abstention": 2,}
-)  # rename labels to int values
+            # Set up axes
+            # ax.set_xticks(ax.get_xticks().tolist())
+            ax.set_xticklabels(["[CLS]"] + tokens + ["[SEP]"], rotation=90)
+            # ax.set_yticks(ax.get_yticks().tolist())
+            ax.set_yticklabels(["[CLS]"] + tokens + ["[SEP]"])
 
-test_df = pd.concat([X_test, y_test], axis=1)
-test_df = test_df.rename(columns={"processed_text": "text", "vote": "label"})
+            # Show label at every tick
+            ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+            ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
 
-test_dataset = DatasetDict({"test": Dataset.from_pandas(test_df)})
+            # plt.show()
+            img_path = f'attention_{layer}_{head}.png'
+            print(f"Saving plot in {img_path}")
+            plt.savefig(img_path)
 
-encoded_dataset = test_dataset.map(preprocess_function, batched=True)
-encoded_dataset.set_format(
-    type="torch", columns=["input_ids", "label", "attention_mask"]
-)
+        max_length = 10
+        head = 10
+        layer = 3
+        
+        device = next(model.parameters()).device
 
-
-# %%
-device = next(model.parameters()).device
-y_pred = []
-for p in encoded_dataset["test"]["text"]:
-    ti = tokenizer(p, return_tensors="pt", truncation=True)
-    out = model(**ti.to(device))
-    pred = torch.argmax(out.logits).detach().cpu().numpy()
-    y_pred.append(pred)
-
-y_test = encoded_dataset["test"]["label"]
-
-print(confusion_matrix(y_test, y_pred))
-print(f"Accuracy: {accuracy_score(y_test, y_pred)}")
-print(f"Precision: {precision_score(y_test, y_pred, average='macro')}")
-print(f"Recall: {recall_score(y_test, y_pred, average='macro')}")
-print(f"F1: {f1_score(y_test, y_pred, average='macro')}")
-
-
-# %%
-test_df = test_df.reset_index(drop=True)
-test_df["preds"] = pd.Series(y_pred, dtype=int)
-
-# %%
-agg_labels = test_df.groupby(["ini_num", "dep_parl_group"])["label"].agg(
-    lambda x: disambiguated_mode(x)
-).values
-
-agg_preds = test_df.groupby(["ini_num", "dep_parl_group"])["preds"].agg(
-    lambda x: disambiguated_mode(x)
-).values
-
-print(confusion_matrix(agg_labels, agg_preds))
-print(f"Accuracy: {accuracy_score(agg_labels, agg_preds)}")
-print(f"Precision: {precision_score(agg_labels, agg_preds, average='macro')}")
-print(f"Recall: {recall_score(agg_labels, agg_preds, average='macro')}")
-print(f"F1: {f1_score(agg_labels, agg_preds, average='macro')}")
-
-
+        # input_text = encoded_dataset["test"]["text"][0]
+        # input_text = " ".join(word_tokenize(input_text, language="portuguese")[14:14 + max_length])
+        input_text = "O que " + \
+            "está em causa não foi imposto pelo Governo da República, o que está em " + \
+            "causa não foi definido pelo Governo da República e o que está em causa " + \
+            "não vai ser concretizado pelo Governo da República."
+        ti = tokenizer(input_text, return_tensors="pt", truncation=True)
+        out = model(**ti.to(device), output_attentions=True)
+        visualize_attention(input_text, out.attentions, layer, head)
+    else:
+        raise ValueError(
+            "Mode not implemented."
+        )
 
 # %%

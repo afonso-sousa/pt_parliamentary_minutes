@@ -243,9 +243,6 @@ def parse_args():
         default="data/initial_corpus_meta.csv",
         help="output file path",
     )
-    parser.add_argument(
-        "--log_path", type=str, default="general.log", help="log file path",
-    )
     args = parser.parse_args()
 
     return args
