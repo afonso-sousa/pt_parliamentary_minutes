@@ -1,4 +1,5 @@
 import argparse
+import time
 import urllib.request
 from pathlib import Path
 
@@ -9,17 +10,25 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
-import time
-
-def save_pdf(href, save_path):
-    response = urllib.request.urlopen(href)
-    file = open(save_path, "wb")
-    file.write(response.read())
-    file.close()
-    print(f"Saved file at: {save_path.name}")
 
 
-def download_session_pdfs(driver, leg, session, save_path):
+def _download_session_pdfs(driver, leg, session, save_path):
+    def save_pdf(href, save_path):
+        response = urllib.request.urlopen(href)
+        file = open(save_path, "wb")
+        file.write(response.read())
+        file.close()
+        print(f"Saved file at: {save_path.name}")
+
+    # Confirm that session is selected
+    title = driver.find_element(
+        By.ID, "ctl00_ctl50_g_aa94ec59_77a0_4cf6_bfdd_99098fef46d5_ctl00_lblTitulo"
+    )
+    actual_session_num = int(title.text.split("-")[-1].strip()[0])
+    assert (
+        session == actual_session_num
+    ), f"Session dropdown was not properly set. Selected session: {session}; Actual session: {actual_session_num}"
+
     # Get list of divs with content
     results = driver.find_element(
         By.ID, "ctl00_ctl50_g_aa94ec59_77a0_4cf6_bfdd_99098fef46d5_ctl00_pnlResults"
@@ -35,6 +44,32 @@ def download_session_pdfs(driver, leg, session, save_path):
         href = element.get_attribute("href")
         pdf_save_path = save_path / f"dar_serie_I_{leg}_{session}_{num}.pdf"
         save_pdf(href, pdf_save_path)
+
+
+def process_session_pdfs(select, driver, leg, session, save_path):
+    for option in select.options:
+        selected_session = option.text.split()[0]
+        selected_session = int(selected_session[0])
+        if selected_session == session:
+            select.select_by_visible_text(option.text)
+            break
+
+    time.sleep(2)
+    _download_session_pdfs(driver, leg, session, save_path)
+
+
+def get_session_selector():
+    session_selector_name = (
+        "ctl00$ctl50$g_aa94ec59_77a0_4cf6_bfdd_99098fef46d5$ctl00$ddlSessaoLegislativa"
+    )
+    try:
+        session_selector_elem = WebDriverWait(driver, 3).until(
+            EC.presence_of_element_located((By.NAME, session_selector_name,))
+        )
+    finally:
+        session_select = Select(session_selector_elem)
+        return session_select
+    
 
 
 def parse_args():
@@ -53,12 +88,8 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    print(args)
-
     # Setup
     dir_root_path = Path(__file__).parent.resolve()
-    # driver_path = Path(dir_root_path.parent.parent, "chromedriver")
-    # print(f"Driver path is set to:\n{driver_path}")
 
     save_path = dir_root_path / f"data/pdf_minutes/{args.leg}"
     save_path.mkdir(parents=True, exist_ok=True)
@@ -92,9 +123,7 @@ if __name__ == "__main__":
             EC.presence_of_element_located((By.NAME, leg_selector_name,))
         )
     finally:
-        leg_select = Select(
-            leg_selector_elem
-        )
+        leg_select = Select(leg_selector_elem)
         for option in leg_select.options:
             leg = option.text.split()[0]
             if leg == args.leg:
@@ -103,47 +132,16 @@ if __name__ == "__main__":
 
     time.sleep(2)
 
-    # Select session option
     if args.session:
-        session_selector_name = (
-            "ctl00$ctl50$g_aa94ec59_77a0_4cf6_bfdd_99098fef46d5$ctl00$ddlSessaoLegislativa"
-        )
-        try:
-            session_selector_elem = WebDriverWait(driver, 3).until(
-                EC.presence_of_element_located((By.NAME, session_selector_name,))
-            )
-        finally:
-            session_select = Select(
-                session_selector_elem
-            )
-            for option in session_select.options:
-                selected_session = option.text.split()[0]
-                selected_session = selected_session.split(".")[0]
-                if selected_session == args.session:
-                    session_select.select_by_visible_text(option.text)
-                    break
-
-        download_session_pdfs(driver, args.leg, selected_session, save_path)
+        session_select = get_session_selector()
+        process_session_pdfs(session_select, driver, args.leg, args.session, save_path)
 
     else:
-        session_selector_name = (
-            "ctl00$ctl50$g_aa94ec59_77a0_4cf6_bfdd_99098fef46d5$ctl00$ddlSessaoLegislativa"
-        )
-        try:
-            session_selector_elem = WebDriverWait(driver, 3).until(
-                EC.presence_of_element_located((By.NAME, session_selector_name,))
-            )
-        finally:
-            session_select = Select(
-                session_selector_elem
-            )
-            num_sessions = len(session_select.options)
-            print(f"Downloading all {num_sessions} sessions")
-            for session in list(range(1, len(session_select.options) + 1)):
-                for option in session_select.options:
-                    selected_session = option.text.split()[0]
-                    selected_session = selected_session.split(".")[0]
-                    if selected_session == args.session:
-                        session_select.select_by_visible_text(option.text)
-                        break
-                download_session_pdfs(driver, args.leg, session, save_path)
+        session_select = get_session_selector()
+        num_sessions = len(session_select.options)
+        print(f"Downloading all {num_sessions} sessions")
+        for session in list(range(1, len(session_select.options) + 1)):
+            process_session_pdfs(session_select, driver, args.leg, session, save_path)
+            time.sleep(2)
+            # get select again to circumvent stale object
+            session_select = get_session_selector()

@@ -1,12 +1,42 @@
-# %%
+import argparse
+import ast
 import json
 import re
+from pathlib import Path
 
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 parties = ["PS", "PSD", "BE", "CDS-PP", "PEV", "PCP"]
+all_legs = ["VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV"]
+
+
+def roman_to_int(roman_str):
+    roman_dict = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+    int_val = 0
+    for i in range(len(roman_str)):
+        if i > 0 and roman_dict[roman_str[i]] > roman_dict[roman_str[i - 1]]:
+            int_val += roman_dict[roman_str[i]] - 2 * roman_dict[roman_str[i - 1]]
+        else:
+            int_val += roman_dict[roman_str[i]]
+    return int_val
+
+
+def scrape_first_page(publicacao):
+    pub_url_id = f"01/{roman_to_int(publicacao['pubLeg']):02}/{int(publicacao['pubSL']):02}/{int(publicacao['pubNr']):03}/{publicacao['pubdt']}"
+    url = f"https://debates.parlamento.pt/catalogo/r3/dar/{pub_url_id}?org=PLC"
+    print(url)
+
+    page = requests.get(url)
+    soup = BeautifulSoup(page.content, "html.parser")
+
+    pagination = soup.find("ul", {"class": "pagination"})
+    children = pagination.findChildren("li", recursive=False)
+    first_page = int(children[0].text)
+
+    return first_page
 
 
 class ARValuesMissingException(Exception):
@@ -69,40 +99,21 @@ def process_voting(votacao):
     return row
 
 
-def scrape_first_page(publicacao):
-    URL = publicacao["URLDiario"]
-    r = requests.get(URL)
-
-    soup = BeautifulSoup(r.content, "html.parser")
-
-    pagination_html = soup.find("ul", {"class": "pagination"})
-
-    if pagination_html is None:
-        raise ARValuesMissingException(
-            "The page does not seem to have a pagination footer."
-        )
-
-    children = pagination_html.findChildren("li", recursive=False)
-    first_page = children[1].string
-
-    return first_page
-
-
 def add_ini_attributes(iniciativa):
     row = []
-    ini_num = iniciativa["iniNr"]
+    ini_num = iniciativa.get("iniNr")
     row.append(ini_num)
-    ini_leg = iniciativa["iniLeg"]
+    ini_leg = iniciativa.get("iniLeg")
     row.append(ini_leg)
-    ini_tipo = iniciativa["iniDescTipo"]
+    ini_tipo = iniciativa.get("iniDescTipo")
     row.append(ini_tipo)
-    ini_titulo = iniciativa["iniTitulo"]
+    ini_titulo = iniciativa.get("iniTitulo")
     row.append(ini_titulo)
-    ini_sessao = iniciativa["iniSel"]
+    ini_sessao = iniciativa.get("iniSel")
     row.append(ini_sessao)
-    dataInicioLeg = iniciativa["dataInicioleg"]
+    dataInicioLeg = iniciativa.get("dataInicioleg")
     row.append(dataInicioLeg)
-    dataFimLeg = iniciativa["dataFimleg"]
+    dataFimLeg = iniciativa.get("dataFimleg")
     row.append(dataFimLeg)
 
     return row
@@ -154,7 +165,7 @@ def process_publication(publicacao):
     else:
         row.append(pages)
     row.append(f"dar_serie_{pub_serie}_{pub_legislatura}_{pub_sessao}_{pub_num:03}.pdf")
-    if pub_legislatura == "X":
+    if pub_legislatura in ["VII", "VIII", "IX"]:
         row.append(scrape_first_page(publicacao))
     else:
         row.append(1)
@@ -172,6 +183,29 @@ def process_speaker(deputado):
     return row
 
 
+def literal_return(val):
+    try:
+        return ast.literal_eval(val)
+    except (ValueError, SyntaxError) as e:
+        return val
+
+
+def create_vote_from_vote_lists(df):
+    # explode all three vote columns
+    df["vot_in_favour"] = df["vot_in_favour"].apply(literal_return)
+    df["vot_against"] = df["vot_against"].apply(literal_return)
+    df["vot_abstention"] = df["vot_abstention"].apply(literal_return)
+    exp_df = (
+        df.explode("vot_in_favour").explode("vot_against").explode("vot_abstention")
+    )
+    # compare labels with votes to find matches
+    exp_df = exp_df.eq(exp_df.pop("dep_parl_group"), axis=0)
+    # remove all False rows and get the matches in each row
+    exp_df = exp_df[exp_df.any(1)].idxmax(1)
+    # remove duplicated indices
+    df["vote"] = exp_df[~exp_df.index.duplicated()]
+
+
 def get_value_from_key(key, dictionary):
     for k, v in (
         dictionary.items()
@@ -187,20 +221,57 @@ def get_value_from_key(key, dictionary):
                 yield result
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Init metadata dataset")
+    parser.add_argument(
+        "--legs",
+        type=str,
+        nargs="+",
+        default=all_legs,
+        choices=all_legs,
+        help="legislatures",
+    )
+    parser.add_argument(
+        "--metadata_dir",
+        type=Path,
+        default="data/initiatives",
+        help="file directory with initiatives metadata",
+    )
+    parser.add_argument(
+        "--output_path",
+        type=str,
+        default="data/initial_corpus_meta.csv",
+        help="output file path",
+    )
+    parser.add_argument(
+        "--log_path", type=str, default="general.log", help="log file path",
+    )
+    args = parser.parse_args()
+
+    return args
+
+
 if __name__ == "__main__":
-    leg_num_list = ["X", "XI", "XII"]  # "VIII", "IX"
+    args = parse_args()
+
+    print(f"Selected legs: {args.legs}")
+
     rows = []
     ini_count = 0
-    for leg_num in leg_num_list:
+    for leg_num in args.legs:
         print(f"Processing Legislatura{leg_num}")
-        with open(f"data/parliament/iniciativas/Iniciativas{leg_num}.json.txt") as f:
+        with open(args.metadata_dir / f"Iniciativas{leg_num}.json") as f:
             json_data = json.load(f)
 
         iniciativas = json_data[
             "ArrayOfPt_gov_ar_objectos_iniciativas_DetalhePesquisaIniciativasOut"
         ]["pt_gov_ar_objectos_iniciativas_DetalhePesquisaIniciativasOut"]
 
-        for i, iniciativa in enumerate(iniciativas):
+        for i, iniciativa in tqdm(
+            enumerate(iniciativas),
+            desc="Iterating over initiatives",
+            total=len(iniciativas),
+        ):
             try:
                 # skip joint initiatives
                 conjuntas = get_value_from_key("iniciativasConjuntas", iniciativa)
@@ -220,7 +291,7 @@ if __name__ == "__main__":
                 ]
 
                 oradores, votacao = None, None
-                print(f"{len(eventos)} events")
+                # print(f"{len(eventos)} events")
                 for evento in eventos:
                     if evento["fase"] == "Discussão generalidade":
                         oradores = list(get_value_from_key("oradores", evento))
@@ -236,7 +307,7 @@ if __name__ == "__main__":
                 if isinstance(speakers, dict):
                     speakers = [speakers]
 
-                print(f"{len(speakers)} speakers")
+                # print(f"{len(speakers)} speakers")
                 ini_count += 1
 
                 for orador in speakers:
@@ -255,16 +326,15 @@ if __name__ == "__main__":
                     deputado = deputado[0]
                     row.extend(process_speaker(deputado))
 
-                    print("Adding row...")
+                    # print("Adding row...")
                     rows.append(row)
 
-                print(f"Initiative #{i + 1} done")
+                # print(f"Initiative #{i + 1} done")
 
             except ARValuesMissingException as e:
                 print(f"Skipping initiative #{i + 1}. {e}")
 
-    print(f"# Initiatives: {ini_count}")
-
+    print(f"Total initiatives processed: {ini_count}")
 
     df = pd.DataFrame(
         rows,
@@ -293,6 +363,7 @@ if __name__ == "__main__":
         ],
     )
 
-    df.to_pickle("data/initial_corpus_meta.pkl")  # df.to_csv("data/out.csv", index=False)
+    # process votes
+    create_vote_from_vote_lists(df)
 
-# %%
+    df.to_csv(args.output_path, index=False)
