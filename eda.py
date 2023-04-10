@@ -149,11 +149,12 @@ def build_who_votes_with_whom_plot(ax, field, topX, title):
     value_tuples = [tuple(ast.literal_eval(s)) for s in list(value_tuples)]
     values = [",".join(i) for i in value_tuples]
     freqs = cnt[topX_indices]
-    # top_results = [r for r in values if len(r) > 1]
     if "" in values:
         values[values.index("")] = "No votes"
 
-    ax = sns.barplot(x=values, y=freqs, ax=ax)
+    # colors = {"PSD,CDS-PP": "#FFA602", "PS": "#ff9cdd", "PSD,PS,CDS": "blue", "PS,PCP,BE,PEV": "#fe0100", "PSD,PS,CDS-PP,PCP,BE,PEV": "green", "PCP,BE,PEV": "#330000", "PS,PSD,CDS-PP": "pink", "PSD,PS,CDS-PP,PCP,BE,PEV": "#3500FE"}
+    colors = ["#ffa602", "#ff9cdd", "#5d8cae", "#fe0100", "#00cc00", "#330000", "#ff66cc", "#3500fe"]
+    ax = sns.barplot(x=values, y=freqs, ax=ax, palette=colors)
     ax.set_xticklabels(ax.get_xticklabels(), rotation=40, ha="right")
     ax.set(title=title, xlabel="Party Groups", ylabel="Frequency")
 
@@ -213,8 +214,10 @@ ax.set(title="Proposals vs Voting Behaviour")
 
 
 # %%
-ax = sns.countplot(x="dep_parl_group", data=df)
-ax.set(title="Proposals per Party", xlabel=None, ylabel="frequency")
+df_no_ninsc = df[df.dep_parl_group != "Ninsc"]
+colors = {"PS": "#ff9cdd", "CDS-PP": "#3299fe", "PCP": "#fe0100", "BE": "#330000", "PSD": "#FFA602", "PEV": "#26AE09", "PAN": "#40DE12", "CH": "#6600CD", "IL": "#3500FE", "L": "#AA2B00"}
+ax = sns.countplot(x="dep_parl_group", data=df_no_ninsc, palette=colors, order=df_no_ninsc.dep_parl_group.value_counts().index)
+ax.set(title="Interventions per Party", xlabel=None, ylabel="frequency")
 
 
 # %%
