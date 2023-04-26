@@ -1,5 +1,8 @@
 # Portuguese Parliamentary Minutes Dataset
 
+## Quick Start
+You can download every resource in [this link](https://uporto-my.sharepoint.com/:f:/g/personal/up201709001_up_pt/EtNMvF9EICpGjPvwjRPpcWoBNqFScdti5LA4f3qowp2wZg?e=kqWgVF).
+
 ## Requirements and Installation
 
 **a. Clone the repository.**
@@ -13,7 +16,7 @@ We have compiled an `enviroment.yml` file with all the required dependencies. To
 conda env create -f environment.yml
 ```
 
-## Quick Start
+## Download Official Resources
 ### Download required content to compile Corpus
 **a. Download PDFs.**
 The script for downloading the PDFs is built for the Chrome browser, but can easily be modified to suit your prefered browser.
