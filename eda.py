@@ -14,14 +14,14 @@ from nltk.tokenize import sent_tokenize, word_tokenize
 
 # %%
 df = pd.read_csv("data/out_with_text_processed.csv")
-# df = df[~df.isnull().any(axis=1)]
+df = df[~df.isnull().any(axis=1)].reset_index(drop=True)
 
 # Legislatures 2005-2015 -- X, XI and XII
 # df = df[df.ini_leg.isin(["X", "XI", "XII"])]
 
 # %%
 df_with_text = df[df.text_process_label == 1]
-
+df = df_with_text
 # %%
 relevant_cols = df.drop(
     columns=["pages", "pdf_file_path", "doc_first_page", "text_process_label"]
@@ -149,69 +149,72 @@ print(f"# noun phrases: {num_noun_phrases}")  # 389243
 # =================== PLOTS ==================
 # %%
 ####### Who votes with whom? #######
-def build_who_votes_with_whom_plot(ax, field, topX, title):
-    a, cnt = np.unique(df[field].values, return_counts=True)
-    # Exclude empty set
-    valid_indices = [i for i, value in enumerate(a) if value and value != "[]"]
-    a, cnt = a[valid_indices], cnt[valid_indices]
-    topX_indices = cnt.argsort()[-topX:][::-1]
-    value_tuples = a[topX_indices]
-    value_tuples = [tuple(ast.literal_eval(s)) for s in list(value_tuples)]
+# def build_who_votes_with_whom_plot(ax, field, topX, title):
+#     a, cnt = np.unique(df[field].values, return_counts=True)
+#     # Exclude empty set
+#     valid_indices = [i for i, value in enumerate(a) if value and value != "[]"]
+#     a, cnt = a[valid_indices], cnt[valid_indices]
+#     topX_indices = cnt.argsort()[-topX:][::-1]
+#     value_tuples = a[topX_indices]
+#     value_tuples = [tuple(ast.literal_eval(s)) for s in list(value_tuples)]
 
-    # Create a dictionary to map each party group to a color
-    party_groups = [
-        "PSD,CDS-PP",
-        "PS",
-        "PSD,PS,CDS",
-        "PS,PCP,BE,PEV",
-        "PCP,BE,PEV",
-        "PS,PSD,CDS-PP",
-        "PSD,PS,CDS-PP,PCP,BE,PEV",
-        "PS,PSD,CDS-PP,PCP,PEV",
-        "PSD,PS,CDS-PP",
-        "BE,PEV,PCP",
-        "PCP,PEV",
-        "BE",
-        "CDS-PP",
-        "PSD",
-    ]
+#     # Create a dictionary to map each party group to a color
+#     party_groups = [
+#         "PSD,CDS-PP",
+#         "PS",
+#         "PSD,PS,CDS",
+#         "PS,PCP,BE,PEV",
+#         "PCP,BE,PEV",
+#         "PS,PSD,CDS-PP",
+#         "PSD,PS,CDS-PP,PCP,BE,PEV",
+#         "PS,PSD,CDS-PP,PCP,PEV",
+#         "PSD,PS,CDS-PP",
+#         "BE,PEV,PCP",
+#         "PCP,PEV",
+#         "BE",
+#         "CDS-PP",
+#         "PSD",
+#     ]
 
-    distinct_colors = sns.color_palette("husl", n_colors=len(party_groups)).as_hex()
-    colors = dict(zip(party_groups, distinct_colors))
+#     distinct_colors = sns.color_palette("husl", n_colors=len(party_groups)).as_hex()
+#     colors = dict(zip(party_groups, distinct_colors))
 
-    values = [",".join(i) for i in value_tuples]
-    freqs = cnt[topX_indices]
-    # if "" in values:
-    #     values[values.index("")] = "No votes"
+#     values = [",".join(i) for i in value_tuples]
+#     freqs = cnt[topX_indices]
+#     # if "" in values:
+#     #     values[values.index("")] = "No votes"
 
-    ax = sns.barplot(x=values, y=freqs, ax=ax, palette=colors)
-    ax.set_xticklabels(ax.get_xticklabels(), rotation=40, ha="right")
-    ax.set(
-        title=title,
-    )  # xlabel="Party Groups", ylabel="Frequency")
+#     ax = sns.barplot(x=values, y=freqs, ax=ax, palette=colors)
+#     ax.set_xticklabels(ax.get_xticklabels(), rotation=40, ha="right")
+#     ax.set(
+#         title=title,
+#     )  # xlabel="Party Groups", ylabel="Frequency")
 
 
-fig, axs = plt.subplots(1, 3, figsize=(20, 5))
-topX = 8
-build_who_votes_with_whom_plot(axs[0], "vot_in_favour", topX, title="In Favor")
-build_who_votes_with_whom_plot(axs[1], "vot_against", topX, title="Against")
-build_who_votes_with_whom_plot(axs[2], "vot_abstention", topX, title="Abstention")
-# plt.suptitle("Who votes with whom?")
-plt.tight_layout()
-plt.show()
+# fig, axs = plt.subplots(1, 3, figsize=(20, 5))
+# topX = 8
+# build_who_votes_with_whom_plot(axs[0], "vot_in_favour", topX, title="In Favor")
+# build_who_votes_with_whom_plot(axs[1], "vot_against", topX, title="Against")
+# build_who_votes_with_whom_plot(axs[2], "vot_abstention", topX, title="Abstention")
+# # plt.suptitle("Who votes with whom?")
+# plt.tight_layout()
+# plt.show()
 
 
 # %%
 ####### Who votes with whom? Grouped bar chart #######
-def compute_top_groups(fields, topX):
+# %%
+def compute_top_groups_per_initiative(fields, topX):
+    initiative_groups = df.groupby(["ini_num", "ini_leg", "ini_type"])
+
     cnt_dict = {}
 
-    for field in fields:
-        a, cnt = np.unique(df[field].values, return_counts=True)
-        valid_indices = [i for i, value in enumerate(a) if value and value != "[]"]
-        a, cnt = a[valid_indices], cnt[valid_indices]
-        for key, value in zip(a, cnt):
-            cnt_dict[key] = cnt_dict.get(key, 0) + value
+    for _, group_df in initiative_groups:
+        for field in fields:
+            # same value multiple times
+            v = group_df[field].values[0]
+            if v != "[]":
+                cnt_dict[v] = cnt_dict.get(v, 0) + 1
 
     top_groups = sorted(cnt_dict.items(), key=lambda x: x[1], reverse=True)[:topX]
 
@@ -220,21 +223,58 @@ def compute_top_groups(fields, topX):
 
 topX = 8
 fields = ["vot_in_favour", "vot_against", "vot_abstention"]
-top_groups = compute_top_groups(fields, topX)
-titles = ["In Favor", "Against", "Abstention"]
+top_groups = compute_top_groups_per_initiative(fields, topX)
+
+
+# %%
+# def compute_top_groups(fields, topX):
+#     cnt_dict = {}
+
+#     for field in fields:
+#         a, cnt = np.unique(df[field].values, return_counts=True)
+#         valid_indices = [i for i, value in enumerate(a) if value and value != "[]"]
+#         a, cnt = a[valid_indices], cnt[valid_indices]
+#         for key, value in zip(a, cnt):
+#             cnt_dict[key] = cnt_dict.get(key, 0) + value
+
+#     top_groups = sorted(cnt_dict.items(), key=lambda x: x[1], reverse=True)[:topX]
+
+#     return top_groups
+
+
+# topX = 8
+# fields = ["vot_in_favour", "vot_against", "vot_abstention"]
+# top_groups = compute_top_groups(fields, topX)
+# %%
+titles = ["In Favour", "Against", "Abstention"]
 
 grouped_data = {}
 party_groups = [group for group, _ in top_groups]
 
+initiative_groups = df.groupby(["ini_num", "ini_leg", "ini_type"])
+
 for field, title in zip(fields, titles):
-    a, cnt = np.unique(df[field].values, return_counts=True)
-    valid_indices = [i for i, value in enumerate(a) if value and value != "[]"]
-    a, cnt = a[valid_indices], cnt[valid_indices]
+    c = {}
+    for _, group_df in initiative_groups:
+        v = group_df[field].values[0]
+        if v in party_groups:
+            c[v] = c.get(v, 0) + 1
 
     grouped_data[title] = {
-        "values": party_groups,
-        "freqs": cnt,
+        "values": c.keys(),
+        "freqs": c.values(),
     }
+
+# %%
+# for field, title in zip(fields, titles):
+#     a, cnt = np.unique(df[field].values, return_counts=True)
+#     valid_indices = [i for i, value in enumerate(a) if value and value != "[]"]
+#     a, cnt = a[valid_indices], cnt[valid_indices]
+
+#     grouped_data[title] = {
+#         "values": party_groups,
+#         "freqs": cnt,
+#     }
 
 grouped_data = {field: {"values": [], "freqs": []} for field in fields}
 
@@ -251,6 +291,7 @@ for field in fields:
 # distinct_colors = sns.color_palette("husl", n_colors=len(party_groups)).as_hex()
 # colors = dict(zip(party_groups, distinct_colors))
 
+# %%
 bar_width = 0.2
 bar_positions = np.arange(len(top_groups))
 fig, ax = plt.subplots(figsize=(15, 5))
@@ -260,12 +301,19 @@ for i, (title, (_, data)) in enumerate(zip(titles, grouped_data.items())):
     values = data["values"]
     freqs = data["freqs"]
     bar_positions_shifted = bar_positions + i * bar_width
+    palette_tab10 = sns.color_palette("tab10", 10)
+    color = (
+        palette_tab10[2]
+        if title == "In Favour"
+        else palette_tab10[3] if title == "Against" else palette_tab10[1]
+    )
     ax.bar(
         bar_positions_shifted,
         freqs,
         bar_width,
         label=title,
         # color=[colors[val] for val in values],
+        color=color,
     )
 
 ax.set_xticks(bar_positions + bar_width * (len(titles) - 1) / 2)
@@ -404,6 +452,19 @@ reject_frequency_table.columns = ["Party", "Reject Frequency"]
 ### MEAN INTERVENTIONS PER INITIATIVE ###
 result_df.frequency.mean()
 
+# %%
 ### MEAN INTERVENTIONS PER INITIATIVE PER PARTY ###
 result_df.groupby("proposing_party")["frequency"].mean().reset_index()
+# %%
+df[df["vot_in_favour"]]
+# %%
+# votes in favour per party
+df["vot_in_favour"].apply(ast.literal_eval).explode().value_counts()
+
+# %%
+# votes against per party
+df["vot_against"].apply(ast.literal_eval).explode().value_counts()
+# %%
+# abstentions per party
+a = df["vot_abstention"].apply(ast.literal_eval).explode().value_counts()
 # %%
