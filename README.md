@@ -1,13 +1,13 @@
 # Portuguese Parliamentary Minutes Dataset
 
 ## Quick Start
-You can download every resource in [this link](https://uporto-my.sharepoint.com/:f:/g/personal/up201709001_up_pt/EtNMvF9EICpGjPvwjRPpcWoBNqFScdti5LA4f3qowp2wZg?e=kqWgVF).
+You can download every resource in [this link](https://uporto-my.sharepoint.com/:x:/g/personal/up201709001_up_pt/EZvUHZqF5xVGvwX2AD2RZ9gBvH7VexlRdb63GSvEsdJRzg?e=iJ8njz).
 
 ## Requirements and Installation
 
 **a. Clone the repository.**
 ```shell
-git clone https://github.com/AfonsoSalgadoSousa/pt_parliamentary_minutes.git
+git clone https://github.com/afonso-sousa/pt_parliamentary_minutes.git
 ```
 **b. Install dependencies.**
 This project uses Anaconda as its package manager. Make sure you have it installed. For more info check [Anaconda's official documentation](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html) on environment management.
@@ -52,8 +52,10 @@ Simply run:
 ```shell
 python nlp_vote_prediction.py --mode ${MODE} --model ${MODELNAME}
 ```
-${MODELNAME} can take values `nb` (NaiveBayes), `lr` (Logistic Regression), or `bert` (DistilBERT).
-${MODE} can take values `train`, `test`, or `attention_vis` (for DistilBERT).
+MODELNAME can take values `nb` (NaiveBayes), `lr` (Logistic Regression), or any model hosted under the Hugging Face Hub (e.g., `PORTULAN/albertina-100m-portuguese-ptpt-encoder`).
+MODE can take values `train`, `test`, or `attention_vis` (for transformer-based models).
+
+Alternatively, you can run a script under the [folder with the same name](https://github.com/afonso-sousa/pt_parliamentary_minutes/blob/main/scripts).
 
 ### Exploratory Data Analysis
 In `eda.py` you can find a Jupyter-like Python file. It contains a variety of different statistical information (frequencies, plots, etc.). If ran in Visual Studio Code, you can execute the code as notebook cells.

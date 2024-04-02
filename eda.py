@@ -16,6 +16,9 @@ from nltk.tokenize import sent_tokenize, word_tokenize
 df = pd.read_csv("data/out_with_text_processed.csv")
 df = df[~df.isnull().any(axis=1)].reset_index(drop=True)
 
+# %%
+df.to_csv("pt_parl_v.csv", index=False, encoding="utf-8")
+
 # Legislatures 2005-2015 -- X, XI and XII
 # df = df[df.ini_leg.isin(["X", "XI", "XII"])]
 
@@ -37,6 +40,18 @@ unique_num_leg_type = (
     .rename(columns={0: "count"})
 )
 assert len(unique_num_leg_type[unique_num_leg_type["count"] > 1]) == 0
+
+# %%
+initiatives_per_legislature = (
+    unique_num_leg_type.groupby("ini_leg")
+    .size()
+    .reset_index(name="initiatives_per_legislature")
+)
+
+# %%
+interventions_per_legislature = (
+    df.groupby("ini_leg").size().reset_index(name="interventions_per_legislature")
+)
 
 # %%
 parties = df["dep_parl_group"].unique()
@@ -69,6 +84,74 @@ print(f"# tokens: {len(allwords)}")  # 3790086
 print(f"Vocabulary size: {len(vocabulary)}")  # 47878
 print(f"Mean # words per intervention: {len(allwords) // len(df_with_text)}")  # 621
 print(f"Mean # sentences per intervention: {int(mean_sentences_per_intervention)}")
+
+# %%
+# Interventions per year
+df["pub_date"] = pd.to_datetime(df["pub_date"])
+
+# Extract year from the pub_date column
+df["year"] = df["pub_date"].dt.year
+
+count_per_year_inter = df["year"].value_counts().sort_index()
+
+# initiatives
+count_per_year_ini = (
+    df.groupby(["year", "ini_num", "ini_leg", "ini_type"])
+    .size()
+    .reset_index(name="count_per_year_ini")
+)
+count_per_year = count_per_year_ini.groupby("year")["count_per_year_ini"].size()
+
+plt.bar(
+    count_per_year.index - 0.2,
+    count_per_year.values,
+    width=0.4,
+    color="royalblue",
+    label="Initiatives",
+)
+
+# Plotting count of unique combinations per year
+plt.bar(
+    count_per_year_inter.index + 0.2,
+    count_per_year_inter.values,
+    width=0.4,
+    color="orange",
+    label="Interventions",
+)
+
+# Adding labels and title
+# plt.title('Count of Entries and Unique Combinations per Year')
+# plt.xlabel('Year')
+# plt.ylabel('Count')
+plt.xticks(count_per_year_inter.index)
+plt.legend()
+plt.xticks(rotation=45)
+
+years_per_legislature = df.groupby("ini_leg")["year"].unique()
+legislatures = df["ini_leg"].unique()
+colors = ["red", "green", "blue", "yellow", "orange"]  # Adjust colors as needed
+# for i, legislature in enumerate(legislatures):
+#     leg_range = years_per_legislature.loc[legislature]
+#     plt.axvspan(
+#         min(leg_range) if legislature != "XIV" else min(leg_range) - 1,
+#         max(leg_range),
+#         # color=colors[i],
+#         # alpha=0.0,
+#         color="blue",
+#         alpha=0.1,
+#         # linestyle="-",
+#         linewidth=10,
+#         # label=f"Legislature {legislature}",
+#     )
+plt.grid(axis="y", linestyle="--", alpha=0.7)
+plt.tight_layout()
+plt.show()
+
+# %%
+# years to legislatures
+years_per_legislature = df.groupby("ini_leg")["year"].unique()
+
+print(years_per_legislature)
 
 # %%
 # Check 100 most common words in dataset
@@ -413,8 +496,20 @@ ax = sns.countplot(
             "vot_abstention": "abstention",
         }
     ),
+    order=["in favour", "against", "abstention"],
+    palette={"in favour": "green", "against": "red", "abstention": "orange"},
 )
-ax.set(title="Instances per Label", xlabel=None, ylabel="frequency")
+for p in ax.patches:
+    ax.annotate(
+        format(p.get_height(), ".0f"),
+        (p.get_x() + p.get_width() / 2.0, p.get_height()),
+        ha="center",
+        va="center",
+        xytext=(0, 9),
+        textcoords="offset points",
+    )
+ax.set(xlabel=None, ylabel=None)
+# ax.set(title="Instances per Label", xlabel=None, ylabel="frequency")
 
 
 # %%
@@ -436,10 +531,43 @@ def extract_party(entry):
 
 df["proposing_party"] = df["authors"].apply(extract_party)
 grouped_df = df.groupby(
-    ["ini_num", "ini_leg", "ini_type", "vot_results", "proposing_party"]
+    [
+        "ini_num",
+        "ini_leg",
+        "ini_type",
+        "vot_results",
+        "proposing_party",
+        "vot_in_favour",
+        "vot_abstention",
+        "vot_against",
+    ]
 )["proposing_party"].count()
 result_df = grouped_df.reset_index(name="frequency")
 # result_df["proposing_party"].value_counts().reset_index()
+
+# %%
+result_df["vot_in_favour"] = result_df["vot_in_favour"].apply(ast.literal_eval)
+result_df["vot_abstention"] = result_df["vot_abstention"].apply(ast.literal_eval)
+result_df["vot_against"] = result_df["vot_against"].apply(ast.literal_eval)
+
+result_df["frequency"] = 1
+
+df_exploded = (
+    result_df.explode("vot_in_favour").explode("vot_abstention").explode("vot_against")
+)
+
+# Group by proposing_party and calculate the sum of frequency
+result = (
+    df_exploded.groupby("proposing_party")
+    .agg(
+        vot_in_favour_frequency=("frequency", "sum"),
+        vot_abstention_frequency=("frequency", "sum"),
+        vot_against_frequency=("frequency", "sum"),
+    )
+    .reset_index()
+)
+
+
 # %%
 accepted_df = result_df[result_df["vot_results"] == "Aprovado"]
 accept_frequency_table = accepted_df["proposing_party"].value_counts().reset_index()
