@@ -55,7 +55,7 @@ python nlp_vote_prediction.py --mode ${MODE} --model ${MODELNAME}
 MODELNAME can take values `nb` (NaiveBayes), `lr` (Logistic Regression), or any model hosted under the Hugging Face Hub (e.g., `PORTULAN/albertina-100m-portuguese-ptpt-encoder`).
 MODE can take values `train`, `test`, or `attention_vis` (for transformer-based models).
 
-Alternatively, you can run a script under the [folder with the same name](https://github.com/afonso-sousa/pt_parliamentary_minutes/blob/main/scripts).
+Alternatively, you can run a script under [scripts](https://github.com/afonso-sousa/pt_parliamentary_minutes/blob/main/scripts).
 
 ### Exploratory Data Analysis
 In `eda.py` you can find a Jupyter-like Python file. It contains a variety of different statistical information (frequencies, plots, etc.). If ran in Visual Studio Code, you can execute the code as notebook cells.
